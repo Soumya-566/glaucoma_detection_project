@@ -1,0 +1,628 @@
+import cv2
+import numpy as np
+import sys
+import os
+import glob
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from sklearn.preprocessing import LabelEncoder
+from keras.utils.np_utils import to_categorical
+
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(10,10))
+val=['Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Glaucomatous',
+'Glaucomatous',
+'Glaucomatous',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal',
+'Normal'
+]
+
+def load_image(path):
+    return cv2.imread(path)
+
+#function to load image and their name
+def load_set(folder, shuffle=False):
+    img_list = sorted(glob.glob(os.path.join(folder, '*.png')) + \
+                      glob.glob(os.path.join(folder, '*.jpg')) + \
+                      glob.glob(os.path.join(folder, '*.jpeg')))
+    if shuffle:
+        np.random.shuffle(img_list)
+    data = []
+    filenames = []
+    for img_fn in img_list:
+        img = load_image(img_fn)
+        data.append(img)
+        filenames.append(img_fn)
+    return data, filenames
+def extract_DRISHTI_GS_train(db_folder,cdr,train_data):
+
+    file_codes_all,exp1,exp2,exp3,exp4 = [], [], [], [], []
+    #if train_data:
+    #    set_path = os.path.join(db_folder, 'DRISHTI_GS')
+    #else:
+    #    set_path = os.path.join(db_folder, 'DRISHTI_GS')
+    #images_path = os.path.join(set_path, 'images')
+    images_path =db_folder
+    X_all, file_names = load_set(images_path)
+    rel_file_names = [os.path.split(fn)[-1] for fn in file_names]
+    rel_file_names_wo_ext = [fn[:fn.rfind('.')] for fn in rel_file_names]
+    if train_data:
+        file_codes = [fn[fn.find('_'):] for fn in rel_file_names_wo_ext]
+    else:
+        file_codes = [fn[fn.find('_'):] for fn in rel_file_names_wo_ext]
+    file_codes_all.extend(file_codes)
+    
+    for fn in rel_file_names_wo_ext:
+        if cdr:
+            if train_data:
+                CDR = open(os.path.join(set_path, 'GT', fn,fn + '_cdrValues.txt'),'r')
+            else:
+                CDR = open(os.path.join(set_path, 'Test_GT', fn,fn + '_cdrValues.txt'),'r')
+            CDR = list(CDR)
+            CDR = CDR[0].split()
+            exp1.append(float(CDR[0]))
+            exp2.append(float(CDR[1]))
+            exp3.append(float(CDR[2]))
+            exp4.append(float(CDR[3]))
+            
+    return X_all, file_codes_all,exp1,exp2,exp3,exp4,file_names
+
+X_all,file_codes_all,exp1,exp2,exp3,exp4,file_names = extract_DRISHTI_GS_train('C:\\Users\\kodandarao\\dataset1',False,True)
+
+print(file_names)
+
+import os
+
+def vesselsegment(filename):
+
+    fundus = cv2.imread(filename)
+    segmentedimage=[]
+    plt.imshow(fundus, cmap='gray')
+    plt.show()
+    b,green_fundus,r = cv2.split(fundus)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    contrast_enhanced_green_fundus = clahe.apply(green_fundus)
+
+    # applying alternate sequential filtering (3 times closing opening)
+    r1 = cv2.morphologyEx(contrast_enhanced_green_fundus, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)), iterations = 1)
+    R1 = cv2.morphologyEx(r1, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)), iterations = 1)
+    r2 = cv2.morphologyEx(R1, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(11,11)), iterations = 1)
+    R2 = cv2.morphologyEx(r2, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(11,11)), iterations = 1)
+    r3 = cv2.morphologyEx(R2, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)
+    R3 = cv2.morphologyEx(r3, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)
+    f4 = cv2.subtract(R3,contrast_enhanced_green_fundus)
+    cv2.imwrite('sub.png',f4)
+    plt.imshow(f4, cmap='gray')
+    plt.show()
+    f5 = clahe.apply(f4)
+
+    # removing very small contours through area parameter noise removal
+    ret,f6 = cv2.threshold(f5,15,255,cv2.THRESH_BINARY)
+    mask = np.ones(f5.shape[:2], dtype="uint8") * 255
+    contours, hierarchy = cv2.findContours(f6.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE) 
+    
+    for cnt in contours:
+        if cv2.contourArea(cnt) <= 200:
+            cv2.drawContours(mask, [cnt], -1, 0, -1)
+    im = cv2.bitwise_and(f5, f5, mask=mask)
+    ret,fin = cv2.threshold(im,15,255,cv2.THRESH_BINARY_INV)
+    newfin = cv2.erode(fin, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)), iterations=1)
+    
+    fundus_eroded = cv2.bitwise_not(newfin)	
+    xmask = np.ones(fundus.shape[:2], dtype="uint8") * 255
+    xcontours, xhierarchy = cv2.findContours(fundus_eroded.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE) 
+   
+    for cnt in xcontours:
+        shape = "unidentified"
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.04 * peri, False)   
+        if len(approx) > 4 and cv2.contourArea(cnt) <= 3000 and cv2.contourArea(cnt) >= 100:
+            shape = "circle"
+        else:
+            shape = "veins"
+        if(shape=="circle"):
+            cv2.drawContours(xmask, [cnt], -1, 0, -1)
+        
+    finimage = cv2.bitwise_and(fundus_eroded,fundus_eroded,mask=xmask)
+    blood_vessels = cv2.bitwise_not(finimage)
+   
+    cv2.imwrite("test.png",blood_vessels)
+    fundus_out = cv2.imread('test.png')
+    plt.imshow(fundus_out,cmap='gray')
+    plt.show()
+    segmentedimage.append(blood_vessels)
+    return(segmentedimage)
+
+
+def segment(image,plot_seg,plot_hist,name):
+
+    image = image[400:1500,400:1500,:] 
+
+    Abo,Ago,Aro = cv2.split(image) 
+    M = 100
+    filter = signal.gaussian(M, std=6)
+    STDf = filter.std()
+    
+
+    Ar = Aro - Aro.mean() - Aro.std() 
+    Mr = Ar.mean()          
+    SDr = Ar.std()                          
+    Thr = 0.5*M - STDf - SDr            
+
+    
+    M = 30
+    filter_cup = signal.gaussian(M, std=6) 
+    STDf = filter_cup.std()  
+
+    Ag = Ago - Ago.mean() - Ago.std()
+    Mg = Ag.mean()                        
+    SDg = Ag.std()                        
+    Thg = 0.5*M +2*STDf + 2*SDg + Mg     
+    #print(Thg)
+    
+    
+    hist,bins = np.histogram(Ag.ravel(),256,[0,256])  
+    histr,binsr = np.histogram(Ar.ravel(),256,[0,256])
+
+
+    smooth_hist_g=np.convolve(filter,hist)  
+    smooth_hist_r=np.convolve(filter_cup,histr) 
+    
+    if plot_hist:
+        plt.figure(figsize = (8,8))
+        plt.subplot(2, 2, 1)
+        plt.plot(hist)
+        plt.title("Preprocessed Green Channel")
+
+        plt.subplot(2, 2, 2)
+        plt.plot(smooth_hist_g)
+        plt.title("Smoothed Histogram Green Channel")
+
+        plt.subplot(2, 2, 3)
+        plt.plot(histr)
+        plt.title("Preprocessed Red Channel")
+
+        plt.subplot(2, 2, 4)
+        plt.plot(smooth_hist_r)
+        plt.title("Smoothed Histogram Red Channel")
+
+        plt.show()
+    
+    r,c = Ag.shape
+    Dd = np.zeros(shape=(r,c)) 
+    Dc = np.zeros(shape=(r,c)) 
+
+    for i in range(1,r):
+        for j in range(1,c):
+            if Ar[i,j]>Thr:
+                Dd[i,j]=255
+            else:
+                Dd[i,j]=0
+
+    for i in range(1,r):
+        for j in range(1,c):
+        
+            if Ag[i,j]>Thg:
+                Dc[i,j]=255
+            else:
+                Dc[i,j]=0
+    
+    name = name[47:]
+     
+    cv2.imwrite('C:\\Users\\kodandarao\\results\\'+name+' disk.png',Dd)
+    plt.imsave('C:\\Users\\kodandarao\\results\\'+name+' cup.png',Dc)
+    
+    if plot_seg:
+        plt.imshow(Dd, cmap = 'gray', interpolation = 'bicubic')
+        plt.axis("off")
+        plt.title("Optic Disk")
+        plt.show()
+        
+        plt.imshow(Dc, cmap = 'gray', interpolation = 'bicubic')
+        plt.axis("off")
+        plt.title("Optic Cup")
+        plt.show()
+
+def cdr(cup,disc,plot):
+    
+    #morphological closing and opening operations
+    R1 = cv2.morphologyEx(cup, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2,2)), iterations = 1)
+    r1 = cv2.morphologyEx(R1, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7)), iterations = 1)
+    R2 = cv2.morphologyEx(r1, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(1,21)), iterations = 1)
+    r2 = cv2.morphologyEx(R2, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(21,1)), iterations = 1)
+    R3 = cv2.morphologyEx(r2, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(33,33)), iterations = 2)
+    img = R3
+    ret,thresh = cv2.threshold(img,127,255,0)
+    contours,hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE) #Getting all possible contours in the segmented image
+    cup_diameter = 0
+    largest_area = 0
+    el_cup = contours[0]
+    if len(contours) != 0:
+        for i in range(len(contours)):
+            if len(contours[i]) >= 5:
+                area = cv2.contourArea(contours[i]) 
+                if (area>largest_area):
+                    largest_area=area
+                    index = i
+                    el_cup = cv2.fitEllipse(contours[i])
+                
+    cv2.ellipse(img,el_cup,(140,60,150),3)  
+    x,y,w,h = cv2.boundingRect(contours[index]) 
+    cup_diameter = max(w,h)
+    cubx=w
+    cuby=h
+
+    #morphological closing and opening operations
+    R1 = cv2.morphologyEx(disc, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2,2)), iterations = 1)
+    r1 = cv2.morphologyEx(R1, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7)), iterations = 1)
+    R2 = cv2.morphologyEx(r1, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(1,21)), iterations = 1)
+    r2 = cv2.morphologyEx(R2, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(21,1)), iterations = 1)
+    R3 = cv2.morphologyEx(r2, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(33,33)), iterations = 1)
+    r3 = cv2.morphologyEx(R3, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(43,43)), iterations = 1)
+    img2 = r3
+    
+    ret,thresh = cv2.threshold(img2,127,255,0)
+    contours,hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    disk_diameter = 0
+    largest_area = 0
+    el_disc = el_cup
+    if len(contours) != 0:
+          for i in range(len(contours)):
+            if len(contours[i]) >= 5:
+                area = cv2.contourArea(contours[i]) 
+                if (area>largest_area):
+                    largest_area=area
+                    index = i
+                    el_disc = cv2.fitEllipse(contours[i])
+                    
+            cv2.ellipse(img2,el_disc,(140,60,150),10) 
+            x,y,w,h = cv2.boundingRect(contours[index]) 
+    disk_diameter = max(w,h)
+    diskx=w
+    disky=h
+                
+    if plot:
+        plt.imshow(img2, 'gray',interpolation = 'bicubic')
+        plt.axis("off")
+        plt.title("Optic Disk")
+        plt.show()
+        plt.imshow(img, 'gray')
+        plt.axis("off")
+        plt.title("Optic Cup")
+        plt.show()
+        
+    if(disk_diameter == 0): return 1 
+    cdr = cup_diameter/disk_diameter 
+    return cdr,cubx,cuby,diskx,disky
+
+from scipy import signal
+CDR = [] 
+VAL = [] 
+CDR1 = [] 
+CDR2 = [] 
+CDR3 = [] 
+CDR4 = [] 
+count = 0
+cubdata=[]
+diskdata=[]
+j=len(file_names)
+for i in range(j):
+    set_path = os.path.join('',file_names[i]) 
+    image = cv2.imread(set_path,1)
+    nn=vesselsegment(set_path)
+    segment(image,True,True,set_path)
+    
+    name = file_names[i][47:]
+    cup = cv2.imread('C:\\Users\\kodandarao\\results\\'+name+' cup.png',0) 
+    disc = cv2.imread('C:\\Users\\kodandarao\\results\\'+name+' disk.png',0) 
+    cdr_cal,cubx,cuby,diskx,disky = cdr(cup,disc,True)
+    cubdata.append(cup)
+    diskdata.append(disc)
+    if(val[i] == 'Glaucomatous'):
+        VAL.append(1)
+    else:
+        VAL.append(0)
+    CDR.append(cdr_cal)
+    CDR1.append(cubx)
+    CDR2.append(cuby)
+    CDR3.append(diskx)
+    CDR4.append(disky)
+    print(file_codes_all[count],'Exp1_cdr:',cubx,'Exp2_cdr:',cuby,'Exp3_cdr:',diskx,'Exp4_cdr:',disky,'Pred_cdr:',cdr_cal)
+    count+=1
+    
+
+import numpy as np
+from skimage.feature import greycomatrix
+import cv2 as cv
+def entropy(file_names): 
+    img = cv2.imread(file_names,0)
+    glcm = np.squeeze(greycomatrix(img, distances=[1], 
+                               angles=[0], symmetric=True, 
+                               normed=True))
+    entropy = -np.sum(glcm*np.log2(glcm + (glcm==0)))
+    return entropy
+def DDE(image):
+    img = cv.imread(image,0)
+    sobelx8u = cv.Sobel(img,cv.CV_8U,1,0,ksize=5)
+    sobelx64f = cv.Sobel(img,cv.CV_64F,1,0,ksize=5)
+    abs_sobel64f = np.absolute(sobelx64f)
+    sobel_8u = np.uint8(abs_sobel64f)
+    return sobel_8u
+entropy(file_names[1])
+
+from scipy.linalg import norm
+from scipy import sum, average
+def normalize(arr):
+    rng = arr.max()-arr.min()
+    amin = arr.min()
+    return (arr-amin)*255/rng
+def compare_images(img1, img2):
+    
+    img1 = normalize(img1)
+    img2 = normalize(img2)
+    
+    diff = img1 - img2  
+    m_norm = sum(abs(diff))
+    z_norm = norm(diff.ravel(), 0)  
+    return (m_norm, z_norm)
+
+j=len(file_names)
+en=[]
+c=[]
+c1=[]
+c2=[]
+c3=[]
+for i in range(j):
+    set_path = os.path.join('',file_names[i]) 
+    entropys=entropy(set_path)
+    en.append(entropys)
+    img = cv2.imread(set_path,0)
+    img = cv2.GaussianBlur(img,(3,3),0)
+    laplacian = cv2.Laplacian(img,cv2.CV_64F)
+    sobelx = cv2.Sobel(img,cv2.CV_64F,1,0,ksize=5)  
+    sobely = cv2.Sobel(img,cv2.CV_64F,0,1,ksize=5)  
+    s,s1=compare_images(img,DDE(set_path))
+    d,d1=compare_images(img,sobelx)
+    c.append(s)
+    c1.append(s1)
+    c2.append(d)
+    c3.append(d1)
+
+df=pd.DataFrame();
+df["1"]=CDR1
+df["2"]=CDR2
+df["3"]=CDR3
+df["4"]=CDR4
+df["5"]=en
+df["6"]=c
+df["7"]=c1
+df["8"]=c2
+df["9"]=c3
+df["10"]=CDR
+df["tar"]=VAL
+df.head(10)
+
+import pandas as pd;
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from numpy import array
+from numpy import hstack
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import RNN, SimpleRNN, Conv2D, ReLU, MaxPooling2D, Flatten, Dense
+from keras.preprocessing.sequence import TimeseriesGenerator
+from keras.layers import Dropout
+from tensorflow.keras.optimizers import Adam
+from keras.layers.core import Activation
+from keras.callbacks import LambdaCallback
+from sklearn.preprocessing import MinMaxScaler
+
+train_set = df.sample(frac=0.75, random_state=2)
+test_set = df.drop(train_set.index)
+print(len(test_set.columns))
+print(len(train_set.columns))
+
+sc = MinMaxScaler(feature_range=(0,1))
+training_set_scaled = sc.fit_transform(train_set)
+
+X_train = []
+y_train = []
+for i in range(len(training_set_scaled)):
+    X_train.append(training_set_scaled[i][0:10])
+    y_train.append(training_set_scaled[i][10])
+X_train, y_train = np.array(X_train), np.array(y_train)
+
+X_train = np.reshape(X_train, (X_train.shape[0],X_train.shape[1],1))
+
+le = LabelEncoder()
+y_train_encoded = to_categorical(le.fit_transform(y_train))
+
+sc = MinMaxScaler(feature_range=(0,1))
+test_set_scaled = sc.fit_transform(df)
+X_over = []
+y_over = []
+for i in range(len(test_set_scaled)):
+    X_over.append(test_set_scaled[i][0:10])
+    y_over.append(test_set_scaled[i][10])
+X_over, y_over = np.array(X_over), np.array(y_over)
+X_over = np.reshape(X_over, (X_over.shape[0],X_over.shape[1],1))
+
+sc = MinMaxScaler(feature_range=(0,1))
+test_set_scaled = sc.fit_transform(test_set)
+print(test_set_scaled)
+X_test = []
+y_test = []
+for i in range(len(test_set_scaled)):
+    X_test.append(test_set_scaled[i][0:10])
+    y_test.append(test_set_scaled[i][10])
+X_test, y_test = np.array(X_test), np.array(y_test)
+X_test = np.reshape(X_test, (X_test.shape[0],X_test.shape[1],1))
+
+from keras.models import Sequential
+from keras.layers import Dense,Activation,Flatten,Dropout
+from keras.layers import Conv2D,MaxPooling2D
+
+
+import pandas as pd;
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from numpy import array
+from numpy import hstack
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import RNN, SimpleRNN, Conv1D, ReLU, MaxPooling1D, Flatten, Dense
+from keras.preprocessing.sequence import TimeseriesGenerator
+from keras.layers import Dropout
+from tensorflow.keras.optimizers import Adam
+from keras.layers.core import Activation
+from keras.callbacks import LambdaCallback
+from sklearn.preprocessing import MinMaxScaler
+
+model.fit(X_over,y_over,epochs=100,verbose=0)
+
+
+# define model
+from keras.layers import Conv1D
+from keras.models import Sequential
+model = Sequential()
+model.add(Conv1D(filters=64, kernel_size=2, activation='relu', input_shape=(10, 1)))
+model.add(MaxPooling1D(pool_size=2))
+model.add(Flatten())
+model.add(Dense(50, activation='relu'))
+model.add(Dense(1))
+model.compile(optimizer='adam', loss='mse')
+
+model.fit(X_over,y_over,epochs=1000,verbose=0)
+
+oo = model.predict(X_test)
+print(X_test)
+oo
+
+pred=[]
+for nn in oo:
+    if(nn>0.6):
+        pred.append(1)
+    else:
+        pred.append(0)
+pred  
+
+from sklearn.metrics import (precision_score, recall_score,f1_score, accuracy_score,mean_squared_error,mean_absolute_error)
+from sklearn import metrics
+accuracy = accuracy_score(y_test, pred)
+recall = recall_score(y_test, pred , average='macro')
+precision = precision_score(y_test, pred ,average='macro')
+print("Accuracy")
+print("%.6f" %(accuracy*100))
+print("Recall")
+print("%.6f" %recall)
+print("Precision")
+print("%.6f" %precision)
+
+
+model.save('cnn_model.h5')
+
+from keras.models import load_model
+model=load_model('cnn_model.h5')
+
+oo = model.predict(X_test)
+print(X_test)
+oo
+
